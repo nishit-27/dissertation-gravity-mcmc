@@ -10,7 +10,8 @@ env/
 # Exclude everything except code
 papers/
 results/
-real_data/
+real_data/*
+!real_data/cauvery_south/
 docs/
 plans/
 notebooks/
