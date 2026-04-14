@@ -165,7 +165,7 @@ print(f"    Our depocenter (deepest block): {mean_d.max():.0f} ± {std_d[np.unra
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# Save everything for later analysis
+# Save everything for later analysis (incl. all_misfits for diagnostics plot)
 np.savez(os.path.join(OUT_DIR, 'results_data.npz'),
          mean_depths=mean_d, std_depths=std_d,
          ci_5=posterior['ci_5'], ci_95=posterior['ci_95'],
@@ -176,7 +176,8 @@ np.savez(os.path.join(OUT_DIR, 'results_data.npz'),
          regional_coef=coef,
          drho_0=DRHO_0, lam=LAMBDA,
          acceptance_rate=result['acceptance_rate'],
-         runtime_min=elapsed/60)
+         runtime_min=elapsed/60,
+         all_misfits=np.asarray(result['all_misfits']))
 
 # Depth + uncertainty maps
 fig, axes = plt.subplots(1, 2, figsize=(16, 6))
@@ -243,6 +244,13 @@ for i in range(NX):
     for j in range(NY):
         print(f"{mean_d[i,j]:5.0f}±{std_d[i,j]:3.0f} ", end='')
     print()
+
+# ============================================================
+# Generate full Exp-7 plot suite (user preference)
+# ============================================================
+print(f"\n[6/5] Generating Exp-7 plot suite...")
+import subprocess
+subprocess.run([sys.executable, 'generate_cauvery_plots.py'], check=False)
 
 print(f"\n{'='*65}")
 print(f"DONE — results saved to: {OUT_DIR}/")
