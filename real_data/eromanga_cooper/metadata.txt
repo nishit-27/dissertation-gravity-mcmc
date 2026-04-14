@@ -1,0 +1,107 @@
+Dataset TITLE
+Cooper Basin region 3D map (Version 1) consisting of surfaces of buried granites and basin features.
+
+Dataset AUTHOR(S)
+Meixner, A.J.
+
+Dataset CUSTODIAN
+Geoscience Australia / OEMD
+
+Dataset JURISDICTION
+Australia
+
+Description ABSTRACT
+A 3D map of the Cooper Basin region has been produced over an area of 300 x 450 km to a depth of 20 km.  The 3D map was constructed from 3D inversions of gravity data using geological data to constrain the inversions.  It delineates regions of low density within the basement of the Cooper/Eromanga Basins that are inferred to be granitic bodies.  This interpretation is supported by a spatial correlation between the modelled bodies and known granite occurrences.  The 3D map, which also delineates the 3D geometries of the Cooper and Eromanga Basins, therefore incorporates both potential heat sources and thermally insulating cover, key elements in locating a geothermal play. This study was conducted as part of Geoscience Australia¿s Onshore Energy Security Program, Geothermal Energy Project.
+
+Description SEARCH WORD(S)
+GEOSCIENCES Geology
+GEOSCIENCES Geophysics
+
+Description GEOGRAPHIC EXTENT NAME(S): CODE(S)
+
+Description GEOGRAPHIC BOUNDING BOX
+N_LAT: -25
+S_LAT: -29
+E_LONG: 142.5
+W_LONG: 139.5
+
+Description GEOGRAPHIC EXTENT POLYGON(S)
+
+Data Currency BEGINNING DATE
+
+
+Data Currency ENDING DATE
+
+
+Dataset Status PROGRESS
+Complete
+
+Dataset Status MAINTENANCE AND UPDATE FREQUENCY
+
+
+Access STORED FORMATS
+Digital/Non-Digital	Description
+DIGITAL			asc ASCII text Map Grid of Australia (MGA) GDA94 GRS80
+
+Access AVAILABLE FORMATS
+Digital/Non-Digital	Description
+DIGITAL			asc ASCII text Map Grid of Australia (MGA) GDA94 GRS80
+
+Access ACCESS CONSTRAINT
+
+
+Data Quality LINEAGE
+
+
+Data Quality POSITIONAL ACCURACY
+
+
+Data Quality ATTRIBUTE ACCURACY
+
+
+Data Quality LOGICAL CONSISTENCY
+
+
+Data Quality COMPLETENESS
+
+
+Contact Information CONTACT ORGANISATION
+Geoscience Australia
+
+Contact Information CONTACT POSITION
+Director, Sales and Distribution, ISB
+
+Contact Information MAIL ADDRESS 1
+GPO Box 378
+
+Contact Information MAIL ADDRESS 2
+
+
+Contact Information SUBURB/PLACE/LOCALITY
+Canberra
+
+Contact Information STATE/LOCALITY 2
+ACT
+
+Contact Information COUNTRY
+Australia
+
+Contact Information POSTCODE
+2601
+
+Contact Information TELEPHONE
++61 2 6249 9966
+
+Contact Information FACSIMILE
++61 2 6249 9960
+
+Contact Information ELECTRONIC MAIL ADDRESS
+sales@ga.gov.au
+
+Metadata Date METADATA DATE
+20APR2009
+
+Additional Metadata ADDITIONAL METADATA
+
+
+End of file ...
