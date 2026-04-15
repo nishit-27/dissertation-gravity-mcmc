@@ -18,5 +18,6 @@ docs/
 plans/
 notebooks/
 *.pdf
+!reports/*.pdf
 *.npz
 *.log
