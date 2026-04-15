@@ -42,19 +42,20 @@ N_ITERATIONS = 50_000
 DRHO_0 = -550.0       # kg/m³ (surface contrast: sediment 2.17 vs basement 2.72 g/cc)
 LAMBDA = 5.0e-4       # 1/m (≈0.5 km⁻¹)
 
-# MCMC params (match Exp 7)
-STEP_SIZE = 150.0
+# MCMC params (Run 2: larger step to drop 57% acceptance toward 30-40% optimum;
+# larger depth ceiling to remove pinning artifact seen in Run 1)
+STEP_SIZE = 200.0
 SMOOTHNESS_WEIGHT = 1e-6
 N_SUBLAYERS = 10
 
-# Depth bounds (Ganguli & Pal 2023 report 3000–5400 m in adjacent depocenters)
+# Depth bounds (raised from 6000 to 10000 so MCMC can find true depth of deep blocks)
 DEPTH_MIN = 0.0
-DEPTH_MAX = 6000.0
+DEPTH_MAX = 10000.0
 
 # Data noise (mGal) — XGM2019e commission error + unmodelled short-wavelength
 NOISE_STD = 1.0
 
-OUT_DIR = 'results/exp_cauvery_real'
+OUT_DIR = 'results/exp_cauvery_real_run2'
 
 # ============================================================
 # 1. Load ICGEM XGM2019e Bouguer anomaly
@@ -250,7 +251,11 @@ for i in range(NX):
 # ============================================================
 print(f"\n[6/5] Generating Exp-7 plot suite...")
 import subprocess
-subprocess.run([sys.executable, 'generate_cauvery_plots.py'], check=False)
+env = os.environ.copy()
+env['RESULTS_OUT'] = OUT_DIR
+env['BASIN_NAME'] = 'Cauvery Basin (India)'
+env['BENCHMARK_TXT'] = 'Ganguli & Pal 2023 (adjacent): 3000 – 5400 m'
+subprocess.run([sys.executable, 'generate_plots.py'], env=env, check=False)
 
 print(f"\n{'='*65}")
 print(f"DONE — results saved to: {OUT_DIR}/")

@@ -235,12 +235,12 @@ plt.savefig(os.path.join(OUT_DIR, 'validation_and_comparison.png'),
             dpi=200, bbox_inches='tight')
 plt.close()
 
-# Run full Exp-7 plot suite (reuse generate_cauvery_plots.py via env var)
+# Run full Exp-7 plot suite (basin-aware)
 print("\n  Generating Exp-7 plot suite...")
 env = os.environ.copy()
-env['CAUVERY_OUT'] = OUT_DIR
-subprocess.run([sys.executable, 'generate_cauvery_plots.py'],
-               env=env, check=False)
+env['RESULTS_OUT'] = OUT_DIR
+env['BASIN_NAME'] = 'Eromanga / Cooper Basin (Australia)'
+subprocess.run([sys.executable, 'generate_plots.py'], env=env, check=False)
 
 print(f"\n{'='*70}")
 print(f"DONE — results in {OUT_DIR}/")
