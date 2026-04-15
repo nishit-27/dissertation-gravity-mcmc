@@ -233,4 +233,41 @@ if has_truth:
 else:
     print("[8/8] no truth — skipping validation_vs_truth.png")
 
+# 9. 3D side-by-side (only if truth available)
+if has_truth:
+    print("[9/9] depth_3d_comparison.png  (real vs MCMC, 3D side-by-side)")
+    Xf6t, Yf6t, Zf6t = interp_smooth(truth_depths, factor=6)
+    Xf6m, Yf6m, Zf6m = interp_smooth(mean_d, factor=6)
+    vmn = -max(truth_depths.max(), mean_d.max())
+    vmx = -min(truth_depths.min(), mean_d.min())
+
+    fig = plt.figure(figsize=(20, 9))
+    ax1 = fig.add_subplot(121, projection='3d')
+    s1 = ax1.plot_surface(Xf6t, Yf6t, -Zf6t, cmap=DEPTH_CMAP,
+                          vmin=vmn, vmax=vmx, edgecolor='none', alpha=0.95)
+    ax1.set_xlabel('X (km)', labelpad=10); ax1.set_ylabel('Y (km)', labelpad=10)
+    ax1.set_zlabel('Depth (m, neg = down)', labelpad=10)
+    ax1.set_title(f'Real (GA Z-horizon)\n{truth_depths.min():.0f}–{truth_depths.max():.0f} m',
+                  fontsize=14, fontweight='bold', pad=15)
+    ax1.view_init(elev=30, azim=225)
+
+    ax2 = fig.add_subplot(122, projection='3d')
+    s2 = ax2.plot_surface(Xf6m, Yf6m, -Zf6m, cmap=DEPTH_CMAP,
+                          vmin=vmn, vmax=vmx, edgecolor='none', alpha=0.95)
+    ax2.set_xlabel('X (km)', labelpad=10); ax2.set_ylabel('Y (km)', labelpad=10)
+    ax2.set_zlabel('Depth (m, neg = down)', labelpad=10)
+    ax2.set_title(f'MCMC posterior mean\n{mean_d.min():.0f}–{mean_d.max():.0f} m',
+                  fontsize=14, fontweight='bold', pad=15)
+    ax2.view_init(elev=30, azim=225)
+    # Lock both axes to same z-range for fair comparison
+    zmin = min(-truth_depths.max(), -mean_d.max())
+    zmax = max(-truth_depths.min(), -mean_d.min())
+    ax1.set_zlim(zmin, zmax); ax2.set_zlim(zmin, zmax)
+
+    fig.colorbar(s1, ax=[ax1, ax2], shrink=0.5, label='Depth (m, neg = down)')
+    fig.suptitle(f'{BASIN} — 3D Basement Surface: Real vs MCMC',
+                 fontsize=16, fontweight='bold')
+    plt.savefig(f'{OUT_DIR}/depth_3d_comparison.png', dpi=200, bbox_inches='tight')
+    plt.close()
+
 print(f"\nDone. Plots in: {OUT_DIR}/")
