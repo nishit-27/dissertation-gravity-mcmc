@@ -70,32 +70,35 @@ def main():
     print(f"  Block size:  {dx_km:.2f} × {dy_km:.2f} km")
 
     # ------------------------------------------------------------------
-    # Rebin ground truth onto NX×NY block grid (validation only)
+    # Rebin Chakravarthi 2007 reference basement map onto NX×NY grid.
+    # NOTE: This is NOT measured ground truth — it is Chak 2007 Fig 5(f)
+    # (their Marquardt inversion, digitized). Used as method benchmark.
+    # The only real ground truth is the ONGC borehole at 2935 m (single point).
     # ------------------------------------------------------------------
-    truth_x = np.loadtxt(os.path.join(DATA_DIR, 'x_coords.txt'))
-    truth_y = np.loadtxt(os.path.join(DATA_DIR, 'y_coords.txt'))
+    ref_x = np.loadtxt(os.path.join(DATA_DIR, 'x_coords.txt'))
+    ref_y = np.loadtxt(os.path.join(DATA_DIR, 'y_coords.txt'))
     bd_cells = 0.25 * (bd[:-1, :-1] + bd[1:, :-1] + bd[:-1, 1:] + bd[1:, 1:])
-    truth_xc = 0.5 * (truth_x[:-1] + truth_x[1:])
-    truth_yc = 0.5 * (truth_y[:-1] + truth_y[1:])
+    ref_xc = 0.5 * (ref_x[:-1] + ref_x[1:])
+    ref_yc = 0.5 * (ref_y[:-1] + ref_y[1:])
 
-    ix_of = np.clip(np.digitize(truth_xc, block_x_edges) - 1, 0, NX - 1)
-    iy_of = np.clip(np.digitize(truth_yc, block_y_edges) - 1, 0, NY - 1)
+    ix_of = np.clip(np.digitize(ref_xc, block_x_edges) - 1, 0, NX - 1)
+    iy_of = np.clip(np.digitize(ref_yc, block_y_edges) - 1, 0, NY - 1)
 
-    truth_blocks = np.zeros((NX, NY))
+    ref_blocks = np.zeros((NX, NY))
     counts = np.zeros((NX, NY), dtype=int)
     for jj, iy in enumerate(iy_of):
         for ii, ix in enumerate(ix_of):
-            truth_blocks[ix, iy] += bd_cells[jj, ii]
+            ref_blocks[ix, iy] += bd_cells[jj, ii]
             counts[ix, iy] += 1
-    truth_blocks = np.where(counts > 0,
-                            truth_blocks / np.maximum(counts, 1), np.nan)
-    if np.isnan(truth_blocks).any():
+    ref_blocks = np.where(counts > 0,
+                          ref_blocks / np.maximum(counts, 1), np.nan)
+    if np.isnan(ref_blocks).any():
         from scipy.ndimage import distance_transform_edt
-        idx = distance_transform_edt(np.isnan(truth_blocks),
+        idx = distance_transform_edt(np.isnan(ref_blocks),
                                      return_distances=False, return_indices=True)
-        truth_blocks = truth_blocks[tuple(idx)]
-    print(f"  Truth rebin: {truth_blocks.min():.0f}–{truth_blocks.max():.0f} m "
-          f"(mean {truth_blocks.mean():.0f})")
+        ref_blocks = ref_blocks[tuple(idx)]
+    print(f"  Chak2007 ref (rebinned): {ref_blocks.min():.0f}–{ref_blocks.max():.0f} m "
+          f"(mean {ref_blocks.mean():.0f})")
 
     # ------------------------------------------------------------------
     # Run MCMC
@@ -134,28 +137,40 @@ def main():
     thinned = post['samples'][::POSTERIOR_THIN]
     print(f"  Samples saved: {thinned.shape[0]} (thin={POSTERIOR_THIN})")
 
-    rms  = float(np.sqrt(np.mean((mean_d - truth_blocks)**2)))
-    bias = float(np.mean(mean_d - truth_blocks))
-    cov90 = float(np.mean((truth_blocks >= ci_lo) & (truth_blocks <= ci_hi)))
-    cov95 = float(np.mean((truth_blocks >= ci_lo2) & (truth_blocks <= ci_hi2)))
+    # Agreement metrics vs Chakravarthi 2007 inversion (method benchmark)
+    rms_ref  = float(np.sqrt(np.mean((mean_d - ref_blocks)**2)))
+    bias_ref = float(np.mean(mean_d - ref_blocks))
+    cov90 = float(np.mean((ref_blocks >= ci_lo) & (ref_blocks <= ci_hi)))
+    cov95 = float(np.mean((ref_blocks >= ci_lo2) & (ref_blocks <= ci_hi2)))
 
-    # borehole pixel (ONGC 2.935 km) — nearest block center
-    borehole_xy = (30_000.0, 25_000.0)   # approx depocenter, see Chak 2007 Fig 5a
-    ib = int(np.clip(np.digitize([borehole_xy[0]], block_x_edges)[0] - 1, 0, NX-1))
-    jb = int(np.clip(np.digitize([borehole_xy[1]], block_y_edges)[0] - 1, 0, NY-1))
+    # ONGC borehole (real ground truth): at basin depocenter.
+    # Use argmax of reference map to locate the depocenter block.
+    ib, jb = [int(k) for k in np.unravel_index(np.argmax(ref_blocks), ref_blocks.shape)]
+    xc_depo = 0.5*(block_x_edges[ib] + block_x_edges[ib+1])
+    yc_depo = 0.5*(block_y_edges[jb] + block_y_edges[jb+1])
     bore_depth_recov = float(mean_d[ib, jb])
     bore_depth_std   = float(std_d[ib, jb])
+    ONGC_DEPTH = 2935.0
 
-    print(f"\n=== VALIDATION (truth rebinned — NOT a constraint) ===")
+    print(f"\n=== AGREEMENT vs Chakravarthi 2007 inversion (benchmark) ===")
+    print(f"  NOTE: Chak 2007 map is itself an inversion, not measured truth.")
     print(f"  Recovered:   {mean_d.min():.0f}–{mean_d.max():.0f} m "
-          f"(truth {truth_blocks.min():.0f}–{truth_blocks.max():.0f})")
-    print(f"  RMS:         {rms:.0f} m")
-    print(f"  Bias:        {bias:+.0f} m")
-    print(f"  90% CI cov:  {cov90*100:.0f}%")
-    print(f"  95% CI cov:  {cov95*100:.0f}%")
-    print(f"  Mean σ:      {std_d.mean():.0f} m")
-    print(f"  ONGC block: recovered {bore_depth_recov:.0f} ± {bore_depth_std:.0f} m "
-          f"vs reported 2935 m")
+          f"(Chak {ref_blocks.min():.0f}–{ref_blocks.max():.0f})")
+    print(f"  RMS (vs Chak): {rms_ref:.0f} m")
+    print(f"  Bias:          {bias_ref:+.0f} m")
+    print(f"  90% CI cov:    {cov90*100:.0f}%")
+    print(f"  95% CI cov:    {cov95*100:.0f}%")
+    print(f"  Mean σ:        {std_d.mean():.0f} m")
+    print(f"\n=== REAL GROUND TRUTH (ONGC borehole, Agarwal 1995) ===")
+    print(f"  Depocenter block ({ib},{jb}) at ({xc_depo/1000:.1f}, {yc_depo/1000:.1f}) km")
+    print(f"  Recovered:   {bore_depth_recov:.0f} ± {bore_depth_std:.0f} m")
+    print(f"  ONGC drill:  {ONGC_DEPTH:.0f} m")
+    print(f"  Chak 2007:   2830 m  (their inversion, 3.6% vs ONGC)")
+    err_pct = 100.0 * (bore_depth_recov - ONGC_DEPTH) / ONGC_DEPTH
+    in_ci = ci_lo[ib, jb] <= ONGC_DEPTH <= ci_hi[ib, jb]
+    print(f"  Our error:   {err_pct:+.1f}%  |  ONGC within 90% CI: "
+          f"{'YES' if in_ci else 'NO'}  "
+          f"(CI {ci_lo[ib,jb]:.0f}–{ci_hi[ib,jb]:.0f} m)")
 
     # ------------------------------------------------------------------
     # Save everything needed to regenerate plots
@@ -169,8 +184,8 @@ def main():
         ci_5=ci_lo, ci_95=ci_hi, ci_2_5=ci_lo2, ci_97_5=ci_hi2,
         posterior_samples_thinned=thinned.astype(np.float32),
         posterior_thin=POSTERIOR_THIN, burn_in_frac=BURN_IN_FRAC,
-        # truth and geometry
-        truth_blocks=truth_blocks,
+        # Chak 2007 reference (benchmark, NOT measured ground truth)
+        ref_blocks=ref_blocks,
         block_x_edges=block_x_edges, block_y_edges=block_y_edges,
         # inputs
         obs_x=obs_x, obs_y=obs_y, obs_gravity=gravity_obs,
@@ -182,11 +197,14 @@ def main():
         all_misfits=np.asarray(result['all_misfits']),
         acceptance_rate=acc, n_iterations=N_ITERATIONS,
         runtime_min=elapsed/60,
-        # validation metrics
-        rms=rms, bias=bias, coverage_90=cov90, coverage_95=cov95,
-        # borehole reference (for plots — not used in inversion)
-        borehole_xy=np.asarray(borehole_xy), borehole_depth=2935.0,
+        # agreement metrics vs Chak 2007
+        rms_ref=rms_ref, bias_ref=bias_ref,
+        coverage_90=cov90, coverage_95=cov95,
+        # ONGC borehole (real ground truth, single point)
+        borehole_xy=np.asarray([xc_depo, yc_depo]),
+        borehole_depth=ONGC_DEPTH,
         borehole_block=np.asarray([ib, jb]),
+        chak2007_reported_depocenter=2830.0,
         # version tag
         experiment='chintalpudi_v5_50k',
         grid_shape=np.asarray([NX, NY]),
