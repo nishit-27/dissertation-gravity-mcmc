@@ -343,13 +343,15 @@ def plot_08_diagnostics(d, res_dir):
     plt.close(fig)
 
 
-def main():
-    res_dir = sys.argv[1] if len(sys.argv) > 1 else 'results/exp_chintalpudi_v5_50k'
+def generate_all(res_dir):
+    """Load results_data.npz from res_dir and write all 8 plots there.
+
+    Callable from run scripts so one command does inversion + plots.
+    """
     if not os.path.isdir(res_dir):
-        print(f'ERROR: results dir does not exist: {res_dir}')
-        sys.exit(1)
+        raise FileNotFoundError(f'results dir does not exist: {res_dir}')
     d = load(res_dir)
-    print(f"Loaded {res_dir}/results_data.npz")
+    print(f"\nPlotting {res_dir}/results_data.npz")
     print(f"  experiment: {d.get('experiment','?')}")
     print(f"  grid:       {tuple(d['grid_shape'])}")
     print(f"  iters:      {int(d['n_iterations']):,}")
@@ -369,6 +371,11 @@ def main():
     for f in sorted(os.listdir(res_dir)):
         if f.endswith('.png'):
             print(f"  - {f}")
+
+
+def main():
+    res_dir = sys.argv[1] if len(sys.argv) > 1 else 'results/exp_chintalpudi_v5_50k'
+    generate_all(res_dir)
 
 
 if __name__ == '__main__':

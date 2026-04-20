@@ -24,14 +24,20 @@ python -c "import numpy, scipy, matplotlib; print(numpy.__version__, scipy.__ver
 
 ## Run the Chintalpudi v5 inversion
 
-```bash
-# Quick inversion (~10–15 min)
-python run_chintalpudi_v5_50k.py
-python generate_chintalpudi_v5_plots.py results/exp_chintalpudi_v5_50k
+**One command does MCMC + all 8 plots:**
 
-# Publication-quality inversion (~25–30 min)
+```bash
+# Quick inversion + plots (~10–15 min)
+python run_chintalpudi_v5_50k.py
+
+# Publication-quality inversion + plots (~25–30 min)
 python run_chintalpudi_v5_100k.py
-python generate_chintalpudi_v5_plots.py results/exp_chintalpudi_v5_100k
+```
+
+To re-generate plots from a saved run without rerunning MCMC:
+
+```bash
+python generate_chintalpudi_v5_plots.py results/exp_chintalpudi_v5_50k
 ```
 
 Each produces an 8-figure plot suite in the results directory:
@@ -84,8 +90,7 @@ conda activate gravity-mcmc
 git clone https://github.com/nishit-27/dissertation-gravity-mcmc.git && \
 cd dissertation-gravity-mcmc && \
 conda create -n gravity-mcmc -c conda-forge python=3.11 numpy scipy matplotlib -y && \
-conda run -n gravity-mcmc python run_chintalpudi_v5_50k.py && \
-conda run -n gravity-mcmc python generate_chintalpudi_v5_plots.py results/exp_chintalpudi_v5_50k
+conda run -n gravity-mcmc python run_chintalpudi_v5_50k.py
 ```
 
 ## Minimum requirements

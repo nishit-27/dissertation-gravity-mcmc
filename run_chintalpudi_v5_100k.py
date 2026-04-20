@@ -173,7 +173,10 @@ def main():
         grid_shape=np.asarray([NX, NY]),
     )
     print(f"\nSaved: {out_path}")
-    print(f"Now run: python generate_chintalpudi_v5_plots.py {OUT_DIR}")
+
+    # Generate the full 8-plot Exp-7 suite in one go
+    from generate_chintalpudi_v5_plots import generate_all
+    generate_all(OUT_DIR)
 
 
 if __name__ == '__main__':
