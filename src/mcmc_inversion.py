@@ -18,6 +18,7 @@ References:
     Rossi, L. (2017). Bayesian gravity inversion. PhD thesis, Politecnico di Milano.
 """
 
+import time
 import numpy as np
 from .forward_model import (compute_gravity_for_basin_fast,
                              compute_gravity_for_basin,
@@ -348,6 +349,9 @@ def run_mcmc_joint(obs_x, gravity_obs, block_x_edges, block_y_width,
         print(f"Step sizes: depth={step_depth:.0f}m, lambda={step_lambda:.6f}")
         print("-" * 60)
 
+    progress_every = max(500, n_iterations // 50)
+    t_start = time.time()
+
     for it in range(n_iterations):
         # Decide: perturb depth or lambda?
         perturb_lambda = np.random.uniform() < prob_perturb_lambda
@@ -447,12 +451,20 @@ def run_mcmc_joint(obs_x, gravity_obs, block_x_edges, block_y_width,
         all_lambdas[it] = current_lambda
 
         # Progress reporting
-        if verbose and (it + 1) % (n_iterations // 10) == 0:
+        if verbose and (it + 1) % progress_every == 0:
+            elapsed = time.time() - t_start
+            frac = (it + 1) / n_iterations
+            eta = elapsed * (1.0 - frac) / max(frac, 1e-9)
+            rate = (it + 1) / max(elapsed, 1e-9)
             acc_rate = n_accepted / (it + 1) * 100
-            print(f"  Iter {it+1:6d}/{n_iterations} | "
-                  f"Misfit: {current_misfit:8.4f} | "
-                  f"Lambda: {current_lambda:.6f} | "
-                  f"Accept: {acc_rate:5.1f}%")
+            print(f"  [{frac*100:5.1f}%] iter {it+1:>7d}/{n_iterations} | "
+                  f"misfit {current_misfit:8.2f} | "
+                  f"λ {current_lambda:.2e} | "
+                  f"accept {acc_rate:5.1f}% | "
+                  f"{rate:6.0f} it/s | "
+                  f"elapsed {elapsed/60:5.1f} min | "
+                  f"eta {eta/60:5.1f} min",
+                  flush=True)
 
     # Final statistics
     acceptance_rate = n_accepted / n_iterations
@@ -461,7 +473,8 @@ def run_mcmc_joint(obs_x, gravity_obs, block_x_edges, block_y_width,
 
     if verbose:
         print("-" * 60)
-        print(f"Done. Overall acceptance: {acceptance_rate*100:.1f}%")
+        total_min = (time.time() - t_start) / 60
+        print(f"Done in {total_min:.1f} min. Overall acceptance: {acceptance_rate*100:.1f}%")
         print(f"  Depth acceptance:  {depth_acc*100:.1f}% ({n_depth_accepted}/{n_depth_proposed})")
         print(f"  Lambda acceptance: {lambda_acc*100:.1f}% ({n_lambda_accepted}/{n_lambda_proposed})")
         print(f"Final misfit: {current_misfit:.4f}")
@@ -1013,6 +1026,10 @@ def run_mcmc_3d_joint(obs_x, obs_y, gravity_obs,
         print(f"Using incremental forward model (100x speedup for depth steps)")
         print("-" * 60)
 
+    # Progress-reporting cadence: ~50 lines over the run, min 500 iters between prints
+    progress_every = max(500, n_iterations // 50)
+    t_start = time.time()
+
     for it in range(n_iterations):
         # Decide: perturb depth or lambda?
         perturb_lambda = np.random.uniform() < prob_perturb_lambda
@@ -1145,12 +1162,20 @@ def run_mcmc_3d_joint(obs_x, obs_y, gravity_obs,
         all_lambdas[it] = current_lambda
 
         # Progress reporting
-        if verbose and (it + 1) % (n_iterations // 10) == 0:
+        if verbose and (it + 1) % progress_every == 0:
+            elapsed = time.time() - t_start
+            frac = (it + 1) / n_iterations
+            eta = elapsed * (1.0 - frac) / max(frac, 1e-9)
+            rate = (it + 1) / max(elapsed, 1e-9)
             acc_rate = n_accepted / (it + 1) * 100
-            print(f"  Iter {it+1:6d}/{n_iterations} | "
-                  f"Misfit: {current_misfit:8.4f} | "
-                  f"Lambda: {current_lambda:.6f} | "
-                  f"Accept: {acc_rate:5.1f}%")
+            print(f"  [{frac*100:5.1f}%] iter {it+1:>7d}/{n_iterations} | "
+                  f"misfit {current_misfit:8.2f} | "
+                  f"λ {current_lambda:.2e} | "
+                  f"accept {acc_rate:5.1f}% | "
+                  f"{rate:6.0f} it/s | "
+                  f"elapsed {elapsed/60:5.1f} min | "
+                  f"eta {eta/60:5.1f} min",
+                  flush=True)
 
     # Final statistics
     acceptance_rate = n_accepted / n_iterations
@@ -1159,7 +1184,8 @@ def run_mcmc_3d_joint(obs_x, obs_y, gravity_obs,
 
     if verbose:
         print("-" * 60)
-        print(f"Done. Overall acceptance: {acceptance_rate*100:.1f}%")
+        total_min = (time.time() - t_start) / 60
+        print(f"Done in {total_min:.1f} min. Overall acceptance: {acceptance_rate*100:.1f}%")
         print(f"  Depth acceptance:  {depth_acc*100:.1f}% "
               f"({n_depth_accepted}/{n_depth_proposed})")
         print(f"  Lambda acceptance: {lambda_acc*100:.1f}% "
