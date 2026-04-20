@@ -6,6 +6,8 @@ Bayesian MCMC inversion of gravity data to estimate basement depth beneath
 sedimentary basins, with full posterior uncertainty quantification using
 rectangular prism (block) models and depth-dependent density.
 
+> **Setting this up on a lab computer?** See [`SETUP.md`](SETUP.md) for the conda-based install and run instructions.
+
 ---
 
 ## Folder Structure
