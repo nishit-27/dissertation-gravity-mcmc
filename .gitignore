@@ -13,6 +13,7 @@ results/
 real_data/*
 !real_data/cauvery_south/
 !real_data/eromanga_cooper/
+!real_data/chintalpudi/
 real_data/eromanga_cooper/3D_surface_*.ts
 docs/
 plans/
