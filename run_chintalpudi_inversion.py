@@ -25,7 +25,7 @@ from src.utils import make_density_func
 # Configuration
 # ============================================================
 DATA_DIR = 'real_data/chintalpudi'
-OUT_DIR = 'results/exp_chintalpudi_10k'
+OUT_DIR = 'results/exp_chintalpudi_10k_100stn'
 
 NX, NY = 10, 10
 N_ITERATIONS = 10_000
@@ -59,10 +59,14 @@ print(f"  y_meshgrid: {yg.shape}, range {yg.min():.0f}–{yg.max():.0f} m")
 print(f"  gravity:    {gv.shape}, range {gv.min():.2f}–{gv.max():.2f} mGal")
 print(f"  basement:   {bd.shape}, range {bd.min():.0f}–{bd.max():.0f} m")
 
-obs_x = xg.flatten()
-obs_y = yg.flatten()
-gravity_obs = gv.flatten()
-print(f"  Stations: {len(obs_x)}")
+STRIDE = 5   # subsample: every 5th in x and y → ~96 stations (~100)
+xg_s = xg[::STRIDE, ::STRIDE]
+yg_s = yg[::STRIDE, ::STRIDE]
+gv_s = gv[::STRIDE, ::STRIDE]
+obs_x = xg_s.flatten()
+obs_y = yg_s.flatten()
+gravity_obs = gv_s.flatten()
+print(f"  Stations (subsampled, stride={STRIDE}): {len(obs_x)}")
 
 # ============================================================
 # 2. Block grid
