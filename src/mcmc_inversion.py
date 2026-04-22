@@ -1610,3 +1610,259 @@ def process_chain_3d_joint_drho(result, burn_in_frac=0.5, thin=1):
         'drho_ci_5': float(np.percentile(drho_samples, 5)),
         'drho_ci_95': float(np.percentile(drho_samples, 95)),
     }
+
+
+# ======================================================================
+# Rao (1990) / Chakravarthi & Sundararajan (2007) parabolic density law
+# joint MCMC: depths + alpha compaction length
+# ======================================================================
+def run_mcmc_3d_rao_joint(obs_x, obs_y, gravity_obs,
+                          block_x_edges, block_y_edges,
+                          drho_0, noise_std,
+                          n_iterations=50000,
+                          step_depth=300.0, step_alpha=200.0,
+                          depth_min=0.0, depth_max=6000.0,
+                          alpha_min=1000.0, alpha_max=3500.0,
+                          alpha_init=2000.0,
+                          prob_perturb_alpha=0.2,
+                          smoothness_weight=0.0, n_sublayers=10,
+                          initial_depths=None, seed=42, verbose=True):
+    """
+    Joint Bayesian MCMC for basement depth AND alpha (Rao parabolic
+    compaction length), keeping drho_0 FIXED.
+
+    Density law: Δρ(z) = drho_0 · (alpha / (alpha + z))²
+
+    At each iteration:
+      - with probability (1 - prob_perturb_alpha): perturb one block's depth
+        → incremental forward model (only that block recomputed)
+      - with probability prob_perturb_alpha: perturb alpha
+        → full forward recompute (density law changed globally)
+
+    Returns
+    -------
+    dict with keys:
+        'chain', 'alpha_chain', 'misfit_chain',
+        'acceptance_rate', 'depth_acceptance_rate', 'alpha_acceptance_rate',
+        'n_iterations', 'all_misfits', 'all_alphas'
+    """
+    np.random.seed(seed)
+    Nx = len(block_x_edges) - 1
+    Ny = len(block_y_edges) - 1
+    M = len(obs_x)
+    sigma2 = noise_std ** 2
+
+    if initial_depths is not None:
+        current_depths = np.array(initial_depths, dtype=float).copy()
+    else:
+        current_depths = np.ones((Nx, Ny)) * (depth_min + depth_max) / 2.0
+
+    current_alpha = alpha_init
+
+    def make_density(a):
+        return lambda z: drho_0 * (a / (a + np.asarray(z, dtype=float))) ** 2
+
+    current_density_func = make_density(current_alpha)
+
+    # Precompute per-block gravity
+    gravity_blocks = np.zeros((Nx, Ny, M))
+    for ix in range(Nx):
+        x1, x2 = block_x_edges[ix], block_x_edges[ix + 1]
+        for iy in range(Ny):
+            y1, y2 = block_y_edges[iy], block_y_edges[iy + 1]
+            gravity_blocks[ix, iy, :] = compute_single_block_gravity(
+                obs_x, obs_y, x1, x2, y1, y2,
+                current_depths[ix, iy], current_density_func, n_sublayers
+            )
+    current_gravity = np.sum(gravity_blocks, axis=(0, 1))
+    current_misfit = compute_misfit(gravity_obs, current_gravity)
+
+    def smooth2d(d):
+        return np.sum(np.diff(d, axis=0) ** 2) + np.sum(np.diff(d, axis=1) ** 2)
+
+    if smoothness_weight > 0:
+        current_energy = current_misfit / sigma2 + smoothness_weight * smooth2d(current_depths)
+    else:
+        current_energy = current_misfit / sigma2
+
+    chain = [current_depths.copy()]
+    alpha_chain = [current_alpha]
+    misfit_chain = [current_misfit]
+    all_misfits = np.zeros(n_iterations)
+    all_alphas = np.zeros(n_iterations)
+    all_alphas[0] = current_alpha
+
+    n_accepted = 0
+    n_depth_proposed = n_depth_accepted = 0
+    n_alpha_proposed = n_alpha_accepted = 0
+
+    if verbose:
+        print(f"Starting 3D Rao-joint MCMC: {n_iterations} iters, "
+              f"{Nx}x{Ny}={Nx*Ny} blocks")
+        print(f"Estimating: {Nx*Ny} depths + alpha (Δρ₀ fixed at {drho_0:.0f})")
+        print(f"Prior: α ~ Uniform({alpha_min:.0f}, {alpha_max:.0f}) m")
+        print(f"Initial misfit: {current_misfit:.2f}  |  α_init: {current_alpha:.0f}")
+        print(f"Steps: depth σ={step_depth:.0f} m, α σ={step_alpha:.0f} m")
+        print(f"Probability of α perturbation: {prob_perturb_alpha*100:.0f}%")
+        print("-" * 60)
+
+    progress_every = max(500, n_iterations // 50)
+    t_start = time.time()
+
+    for it in range(n_iterations):
+        perturb_alpha = np.random.uniform() < prob_perturb_alpha
+
+        if perturb_alpha:
+            n_alpha_proposed += 1
+            proposed_alpha = current_alpha + np.random.normal(0, step_alpha)
+            if proposed_alpha < alpha_min or proposed_alpha > alpha_max:
+                all_misfits[it] = current_misfit
+                all_alphas[it] = current_alpha
+                continue
+
+            proposed_density_func = make_density(proposed_alpha)
+            old_gravity_blocks = gravity_blocks.copy()
+            for bix in range(Nx):
+                x1, x2 = block_x_edges[bix], block_x_edges[bix + 1]
+                for biy in range(Ny):
+                    y1, y2 = block_y_edges[biy], block_y_edges[biy + 1]
+                    gravity_blocks[bix, biy, :] = compute_single_block_gravity(
+                        obs_x, obs_y, x1, x2, y1, y2,
+                        current_depths[bix, biy],
+                        proposed_density_func, n_sublayers
+                    )
+            proposed_gravity = np.sum(gravity_blocks, axis=(0, 1))
+            proposed_misfit = compute_misfit(gravity_obs, proposed_gravity)
+            if smoothness_weight > 0:
+                proposed_energy = proposed_misfit / sigma2 + smoothness_weight * smooth2d(current_depths)
+            else:
+                proposed_energy = proposed_misfit / sigma2
+
+            delta = proposed_energy - current_energy
+            accept = True if delta < 0 else (np.random.uniform() < np.exp(-delta))
+
+            if accept:
+                current_alpha = proposed_alpha
+                current_density_func = proposed_density_func
+                current_gravity = proposed_gravity
+                current_misfit = proposed_misfit
+                current_energy = proposed_energy
+                n_alpha_accepted += 1
+                n_accepted += 1
+                chain.append(current_depths.copy())
+                alpha_chain.append(current_alpha)
+                misfit_chain.append(current_misfit)
+            else:
+                gravity_blocks[:] = old_gravity_blocks
+        else:
+            n_depth_proposed += 1
+            ix = np.random.randint(0, Nx)
+            iy = np.random.randint(0, Ny)
+            old_depth = current_depths[ix, iy]
+            new_depth = old_depth + np.random.normal(0, step_depth)
+
+            if new_depth < depth_min or new_depth > depth_max:
+                all_misfits[it] = current_misfit
+                all_alphas[it] = current_alpha
+                continue
+
+            x1, x2 = block_x_edges[ix], block_x_edges[ix + 1]
+            y1, y2 = block_y_edges[iy], block_y_edges[iy + 1]
+            new_block_gravity = compute_single_block_gravity(
+                obs_x, obs_y, x1, x2, y1, y2,
+                new_depth, current_density_func, n_sublayers
+            )
+            proposed_gravity = (current_gravity - gravity_blocks[ix, iy]
+                                + new_block_gravity)
+            proposed_misfit = compute_misfit(gravity_obs, proposed_gravity)
+
+            if smoothness_weight > 0:
+                proposed_depths = current_depths.copy()
+                proposed_depths[ix, iy] = new_depth
+                proposed_energy = proposed_misfit / sigma2 + smoothness_weight * smooth2d(proposed_depths)
+            else:
+                proposed_energy = proposed_misfit / sigma2
+
+            delta = proposed_energy - current_energy
+            accept = True if delta < 0 else (np.random.uniform() < np.exp(-delta))
+
+            if accept:
+                current_depths[ix, iy] = new_depth
+                gravity_blocks[ix, iy] = new_block_gravity
+                current_gravity = proposed_gravity
+                current_misfit = proposed_misfit
+                current_energy = proposed_energy
+                n_depth_accepted += 1
+                n_accepted += 1
+                chain.append(current_depths.copy())
+                alpha_chain.append(current_alpha)
+                misfit_chain.append(current_misfit)
+
+        all_misfits[it] = current_misfit
+        all_alphas[it] = current_alpha
+
+        if verbose and (it + 1) % progress_every == 0:
+            elapsed = time.time() - t_start
+            frac = (it + 1) / n_iterations
+            eta = elapsed * (1.0 - frac) / max(frac, 1e-9)
+            rate = (it + 1) / max(elapsed, 1e-9)
+            acc_rate = n_accepted / (it + 1) * 100
+            print(f"  [{frac*100:5.1f}%] iter {it+1:>7d}/{n_iterations} | "
+                  f"misfit {current_misfit:8.2f} | "
+                  f"α {current_alpha:6.0f} | "
+                  f"accept {acc_rate:5.1f}% | "
+                  f"{rate:6.0f} it/s | "
+                  f"elapsed {elapsed/60:5.1f} min | "
+                  f"eta {eta/60:5.1f} min",
+                  flush=True)
+
+    acceptance_rate = n_accepted / n_iterations
+    depth_acc = n_depth_accepted / max(n_depth_proposed, 1)
+    alpha_acc = n_alpha_accepted / max(n_alpha_proposed, 1)
+
+    if verbose:
+        print("-" * 60)
+        print(f"Done in {(time.time()-t_start)/60:.1f} min. "
+              f"Overall acceptance: {acceptance_rate*100:.1f}%")
+        print(f"  Depth acceptance:  {depth_acc*100:.1f}% "
+              f"({n_depth_accepted}/{n_depth_proposed})")
+        print(f"  Alpha acceptance:  {alpha_acc*100:.1f}% "
+              f"({n_alpha_accepted}/{n_alpha_proposed})")
+        print(f"Final α: {current_alpha:.1f}  |  misfit: {current_misfit:.2f}")
+
+    return {
+        'chain': np.array(chain),
+        'alpha_chain': np.array(alpha_chain),
+        'misfit_chain': np.array(misfit_chain),
+        'acceptance_rate': acceptance_rate,
+        'depth_acceptance_rate': depth_acc,
+        'alpha_acceptance_rate': alpha_acc,
+        'n_iterations': n_iterations,
+        'all_misfits': all_misfits,
+        'all_alphas': all_alphas,
+    }
+
+
+def process_chain_3d_rao_joint(result, burn_in_frac=0.5, thin=1):
+    """Post-process: depths + alpha statistics."""
+    chain = result['chain']
+    alpha_chain = result['alpha_chain']
+    n_total = len(chain)
+    burn_in = int(n_total * burn_in_frac)
+    depth_samples = chain[burn_in::thin]
+    alpha_samples = alpha_chain[burn_in::thin]
+    return {
+        'samples': depth_samples,
+        'mean': np.mean(depth_samples, axis=0),
+        'std': np.std(depth_samples, axis=0),
+        'ci_5': np.percentile(depth_samples, 5, axis=0),
+        'ci_95': np.percentile(depth_samples, 95, axis=0),
+        'ci_2_5': np.percentile(depth_samples, 2.5, axis=0),
+        'ci_97_5': np.percentile(depth_samples, 97.5, axis=0),
+        'n_samples': len(depth_samples),
+        'alpha_samples': alpha_samples,
+        'alpha_mean': float(np.mean(alpha_samples)),
+        'alpha_std': float(np.std(alpha_samples)),
+        'alpha_ci_5': float(np.percentile(alpha_samples, 5)),
+        'alpha_ci_95': float(np.percentile(alpha_samples, 95)),
+    }
