@@ -1,37 +1,34 @@
 """
-Chintalpudi v5 — JOINT depth + λ MCMC (20×20, 20k iter, NO boreholes)
+Chintalpudi v5 — JOINT depth + λ MCMC (10×10, 20k iter, NO boreholes)
 ======================================================================
-Same setup as run_chintalpudi_v5_50k.py, but:
+Light-weight joint-λ run for tractable lab runtime.
 
-  - Iterations:   20,000  (vs 50k)
-  - λ:            JOINTLY estimated (prob_perturb_lambda > 0)
-  - Boreholes:    NONE (already absent in v5_50k — kept that way)
-  - Stations:     STRIDE=2 → ~600 averaged stations ("tier 2")
+  - Grid:         10×10 = 100 blocks
+  - Iterations:   20,000
+  - λ:            JOINTLY estimated (prob_perturb_lambda = 0.10)
+  - Boreholes:    NONE
+  - Stations:     STRIDE=4 → ~150 stations (1.5:1 data/unknown)
 
-Why a smaller tier than v5_50k (STRIDE=1, 2400 stations)?
-  Joint-λ steps recompute *all* 400 blocks → cost ∝ Nx·Ny·M.
-  All-stations + joint-λ at 20k iters would take days. Tier 2 keeps it
-  to roughly an overnight run on a fast lab CPU.
+Why 10×10 + ~150 stations instead of v5_50k's 20×20 + 2400 stations?
+  Joint-λ steps recompute *all* blocks → cost ∝ Nx·Ny·M. Going from
+  20×20+2400 stns to 10×10+150 stns drops λ-iter cost by ~64×, bringing
+  total runtime down from ~days to ~1.5 hours.
 
-Literature-grounded fixed Δρ₀ (Chakravarthi & Sundararajan 2007):
-  Δρ₀ = -500 kg/m³, prior λ ∈ [1e-4, 1e-3] (broad around their 5e-4 best fit).
+Density (Chakravarthi & Sundararajan 2007):
+  Δρ₀ = -500 kg/m³ (fixed), prior λ ∈ [1e-4, 1e-3] (broad around their 5e-4).
 
 Runtime estimate (calibrated against chintalpudi v2: 10×10, 10k iter,
 96 stations, prob_λ=0.2, joint → 68 min on M2):
 
   Per-block forward cost ≈ 19.6 ms × (M / 96)
-  Depth iter cost   = 1 × per-block-cost
-  λ iter cost       = Nx·Ny × per-block-cost  (full grid recompute)
+  This run: 10×10, M≈150, 20k iter, prob_λ=0.10
+    depth iters (18,000): ~9 min
+    λ iters     (2,000):  ~100 min
+    => ~110 min total (~1.8 h) on M2; ~1.2 h on a faster lab CPU.
 
-  This run: 20×20, M≈600, 20k iter, prob_λ=0.10
-    depth iters (18,000): ~37 min
-    λ iters     (2,000):  ~27 hours
-    => ~28 hours on M2 single-thread; ~18–20 h on a faster lab Xeon.
-
-  If too slow, in this file change either:
-    - PROB_PERTURB_LAMBDA = 0.05   → roughly halves time (~14 h)
-    - STRIDE = 3                   → ~270 stations, ~12 h at prob=0.1
-    - Both                         → ~6 h
+  Knobs (lower = faster):
+    - STRIDE = 5         → 96 stations, ~1.2 h on M2 (matches v2 baseline)
+    - PROB_PERTURB_LAMBDA = 0.05  → roughly halves time (~55 min)
 """
 import sys, os, time
 import numpy as np
@@ -47,9 +44,9 @@ from src.mcmc_inversion import run_mcmc_3d_joint, process_chain_3d_joint
 DATA_DIR = 'real_data/chintalpudi'
 OUT_DIR  = 'results/exp_chintalpudi_v5_joint_20k'
 
-NX, NY            = 20, 20
+NX, NY            = 10, 10
 N_ITERATIONS      = 20_000
-STRIDE            = 2                  # tier 2: ~600 stations (vs 2400 with stride=1)
+STRIDE            = 4                  # ~150 stations (1.5:1 data/unknown)
 
 # Density: Δρ₀ fixed (paper value), λ JOINTLY inverted with broad prior
 DRHO_0            = -500.0             # Chakravarthi & Sundararajan 2007
@@ -87,7 +84,7 @@ def main():
     obs_x       = xg[::STRIDE, ::STRIDE].flatten()
     obs_y       = yg[::STRIDE, ::STRIDE].flatten()
     gravity_obs = gv[::STRIDE, ::STRIDE].flatten()
-    print(f"  Stations:    {len(obs_x)} (stride={STRIDE} → tier 2)")
+    print(f"  Stations:    {len(obs_x)} (stride={STRIDE})")
     print(f"  Unknowns:    {NX*NY} depths + 1 λ")
     print(f"  Data/param:  {len(obs_x)/(NX*NY+1):.2f}")
 
