@@ -153,28 +153,30 @@ def _rebin_reference(bd, ref_x, ref_y, block_x_edges, block_y_edges, nx, ny):
 # ======================================================================
 def plot_01_depth_comparison(ctx):
     mean_d, ref = ctx['mean_d'], ctx['ref_blocks']
-    ext = ctx['extent']; xc_d, yc_d, bz = ctx['depo_xyz']
+    bx, by = ctx['bx']/1000, ctx['by']/1000
+    xc_d, yc_d, bz = ctx['depo_xyz']
     rms, bias = ctx['rms_ref'], ctx['bias_ref']
     vmax = max(mean_d.max(), ref.max())
     fig, ax = plt.subplots(1, 3, figsize=(18, 5.2))
     for a, arr, t in zip(ax[:2], [mean_d, ref],
                          [f'Our MCMC (posterior mean)\n{mean_d.min():.0f}–{mean_d.max():.0f} m',
                           f'{REF_LABEL}\n{ref.min():.0f}–{ref.max():.0f} m']):
-        im = a.imshow(arr.T, origin='lower', extent=ext, cmap='viridis_r',
-                      vmin=0, vmax=vmax, aspect='auto')
-        a.scatter([xc_d], [yc_d], marker='*', s=280, c='gold',
-                  edgecolor='k', zorder=5, label=ONGC_LABEL)
+        pm = a.pcolormesh(bx, by, arr.T, cmap='viridis_r',
+                          vmin=0, vmax=vmax, shading='flat')
+        a.scatter([xc_d], [yc_d], marker='*', s=200, c='gold',
+                  edgecolors='k', zorder=5, label=ONGC_LABEL)
         a.set_title(t); a.set_xlabel('X (km)')
-        plt.colorbar(im, ax=a, label='Depth (m)')
+        a.set_aspect('equal')
+        plt.colorbar(pm, ax=a, label='Depth (m)')
     ax[0].set_ylabel('Y (km)'); ax[0].legend(loc='lower right', fontsize=8)
     diff = mean_d - ref
-    im = ax[2].imshow(diff.T, origin='lower', extent=ext, cmap='RdBu_r',
-                     vmin=-1500, vmax=1500, aspect='auto')
-    ax[2].scatter([xc_d], [yc_d], marker='*', s=280, c='gold',
-                  edgecolor='k', zorder=5)
+    pm = ax[2].pcolormesh(bx, by, diff.T, cmap='RdBu_r',
+                          vmin=-1500, vmax=1500, shading='flat')
+    ax[2].scatter([xc_d], [yc_d], marker='*', s=200, c='gold',
+                  edgecolors='k', zorder=5)
     ax[2].set_title(f'Difference (ours − Chak)\nRMS {rms:.0f} m, bias {bias:+.0f} m')
-    ax[2].set_xlabel('X (km)')
-    plt.colorbar(im, ax=ax[2], label='Difference (m)')
+    ax[2].set_xlabel('X (km)'); ax[2].set_aspect('equal')
+    plt.colorbar(pm, ax=ax[2], label='Difference (m)')
     fig.suptitle(f"{ctx['tag']} — 2D depth comparison "
                  f"(★ = ONGC borehole, only real ground truth)")
     fig.tight_layout()
@@ -188,18 +190,19 @@ def plot_02_depth_3d_surface(ctx):
     xc, yc = ctx['xc'], ctx['yc']
     X, Y = np.meshgrid(xc, yc, indexing='ij')
     xc_d, yc_d, bz = ctx['depo_xyz']
-    fig = plt.figure(figsize=(15, 6))
+    fig = plt.figure(figsize=(16, 7))
     for k, (arr, t) in enumerate(zip(
             [mean_d, ref],
             [f'Our MCMC (posterior mean)\n{mean_d.min():.0f}–{mean_d.max():.0f} m',
              f'{REF_LABEL}\n{ref.min():.0f}–{ref.max():.0f} m'])):
         ax = fig.add_subplot(1, 2, k+1, projection='3d')
-        s = ax.plot_surface(X, Y, -arr, cmap='viridis_r', alpha=0.9,
-                            edgecolor='none')
+        s = ax.plot_surface(X, Y, -arr, cmap='viridis_r',
+                            edgecolor='k', linewidth=0.15, alpha=0.95)
         ax.scatter([xc_d], [yc_d], [-bz], marker='*', color='gold',
-                   edgecolor='k', s=180, depthshade=False)
+                   edgecolors='k', s=200, depthshade=False, label=ONGC_LABEL)
         ax.set_xlabel('X (km)'); ax.set_ylabel('Y (km)'); ax.set_zlabel('Depth (m)')
-        ax.set_title(t); ax.invert_zaxis()
+        ax.set_title(t)
+        ax.view_init(elev=28, azim=-120)
         fig.colorbar(s, ax=ax, shrink=0.6, label='Depth (m)', pad=0.1)
     fig.suptitle(f"{ctx['tag']} — 3D basement surface")
     fig.tight_layout()
@@ -209,12 +212,14 @@ def plot_02_depth_3d_surface(ctx):
 
 
 def plot_03_uncertainty_map(ctx):
-    std_d = ctx['std_d']; ext = ctx['extent']
+    std_d = ctx['std_d']
+    bx, by = ctx['bx']/1000, ctx['by']/1000
     xc_d, yc_d, _ = ctx['depo_xyz']
     fig, ax = plt.subplots(figsize=(9, 7))
-    im = ax.imshow(std_d.T, origin='lower', extent=ext, cmap='hot_r', aspect='auto')
-    ax.scatter([xc_d], [yc_d], marker='*', s=280, c='gold',
-               edgecolor='k', zorder=5, label=ONGC_LABEL)
+    im = ax.pcolormesh(bx, by, std_d.T, cmap='hot_r', shading='flat')
+    ax.set_aspect('equal')
+    ax.scatter([xc_d], [yc_d], marker='*', s=200, c='gold',
+               edgecolors='k', zorder=5, label=ONGC_LABEL)
     ax.set_xlabel('X (km)'); ax.set_ylabel('Y (km)')
     ax.set_title(f'Posterior uncertainty (std)\n'
                  f'min {std_d.min():.0f}, mean {std_d.mean():.0f}, '
@@ -230,19 +235,25 @@ def plot_03_uncertainty_map(ctx):
 def plot_04_uncertainty_3d_surface(ctx):
     mean_d, std_d = ctx['mean_d'], ctx['std_d']
     xc, yc = ctx['xc'], ctx['yc']
+    xc_d, yc_d, bz = ctx['depo_xyz']
     X, Y = np.meshgrid(xc, yc, indexing='ij')
-    fig = plt.figure(figsize=(9, 7))
+    fig = plt.figure(figsize=(10.5, 7))
     ax = fig.add_subplot(111, projection='3d')
     norm = plt.Normalize(vmin=std_d.min(), vmax=std_d.max())
     colors = plt.cm.hot_r(norm(std_d))
-    ax.plot_surface(X, Y, -mean_d, facecolors=colors, alpha=0.9,
-                    edgecolor='none', rstride=1, cstride=1)
+    ax.plot_surface(X, Y, -mean_d, facecolors=colors,
+                    edgecolor='k', linewidth=0.15, alpha=0.95,
+                    rstride=1, cstride=1)
+    ax.scatter([xc_d], [yc_d], [-bz], marker='*', color='gold',
+               edgecolors='k', s=200, depthshade=False, label=ONGC_LABEL)
     mappable = plt.cm.ScalarMappable(norm=norm, cmap='hot_r')
     mappable.set_array(std_d)
     fig.colorbar(mappable, ax=ax, shrink=0.6, label='Posterior std (m)', pad=0.1)
     ax.set_xlabel('X (km)'); ax.set_ylabel('Y (km)'); ax.set_zlabel('Depth (m)')
-    ax.set_title(f"{ctx['tag']} — 3D basement colored by uncertainty")
-    ax.invert_zaxis()
+    ax.set_title(f"{ctx['tag']} — 3D basement colored by uncertainty\n"
+                 f"σ: min {std_d.min():.0f}, mean {std_d.mean():.0f}, "
+                 f"max {std_d.max():.0f} m")
+    ax.view_init(elev=28, azim=-120)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT_DIR, '04_uncertainty_3d_surface.png'), dpi=130,
                 bbox_inches='tight')
@@ -258,8 +269,8 @@ def plot_05_cross_sections(ctx):
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.2))
     ax = axes[0]
     ax.plot(xc, mean_d[:, jb], 'b-', lw=2, label='Our MCMC (mean)')
-    ax.fill_between(xc, ci_lo[:, jb], ci_hi[:, jb], alpha=0.3, color='b',
-                    label='Our 90% CI')
+    ax.fill_between(xc, ci_lo[:, jb], ci_hi[:, jb],
+                    color='lightsteelblue', alpha=0.6, label='Our 90% CI')
     ax.plot(xc, ref[:, jb], 'k--', lw=2, label=REF_LABEL)
     ax.plot(xc_d, bz, marker='*', color='gold', markeredgecolor='k',
             markersize=18, linewidth=0, label=ONGC_LABEL)
@@ -268,8 +279,8 @@ def plot_05_cross_sections(ctx):
     ax.grid(alpha=0.3)
     ax = axes[1]
     ax.plot(yc, mean_d[ib, :], 'b-', lw=2, label='Our MCMC (mean)')
-    ax.fill_between(yc, ci_lo[ib, :], ci_hi[ib, :], alpha=0.3, color='b',
-                    label='Our 90% CI')
+    ax.fill_between(yc, ci_lo[ib, :], ci_hi[ib, :],
+                    color='lightsteelblue', alpha=0.6, label='Our 90% CI')
     ax.plot(yc, ref[ib, :], 'k--', lw=2, label=REF_LABEL)
     ax.plot(yc_d, bz, marker='*', color='gold', markeredgecolor='k',
             markersize=18, linewidth=0, label=ONGC_LABEL)
@@ -338,7 +349,7 @@ def plot_07_accuracy(ctx):
     ax.set_xlim(lim); ax.set_ylim(lim)
     ax = axes[1]
     diff = (mean_d - ref).flatten()
-    ax.hist(diff, bins=30, color='salmon', edgecolor='k', alpha=0.85)
+    ax.hist(diff, bins=30, color='indianred', edgecolor='k', alpha=0.85)
     ax.axvline(bias, color='b', lw=2, label=f'bias {bias:+.0f} m')
     ax.set_xlabel('Our − Chak (m)'); ax.set_ylabel('Count')
     ax.set_title(f'Per-block difference distribution (std {diff.std():.0f} m)')
