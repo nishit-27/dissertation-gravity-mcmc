@@ -93,11 +93,38 @@ def parabolic_density(z):
     return DRHO_0 * (ALPHA / (ALPHA + z)) ** 2
 
 
+class _ChainPrefixStdout:
+    """Wraps sys.stdout so every line is prefixed with the chain ID.
+    Each worker process installs its own instance."""
+    def __init__(self, real_stdout, chain_id):
+        self._real = real_stdout
+        self._prefix = f'[chain {chain_id:02d}] '
+        self._at_line_start = True
+
+    def write(self, s):
+        if not s:
+            return 0
+        out_parts = []
+        for ch in s:
+            if self._at_line_start and ch != '\n':
+                out_parts.append(self._prefix)
+                self._at_line_start = False
+            out_parts.append(ch)
+            if ch == '\n':
+                self._at_line_start = True
+        return self._real.write(''.join(out_parts))
+
+    def flush(self):
+        self._real.flush()
+
+
 # ======================================================================
 # WORKER — runs ONE chain end-to-end and writes its npz
 # ======================================================================
 def run_one_chain(args):
     chain_id, init_depth, seed, payload = args
+    # Redirect this worker's stdout so every print is auto-prefixed
+    sys.stdout = _ChainPrefixStdout(sys.__stdout__, chain_id)
     obs_x         = payload['obs_x']
     obs_y         = payload['obs_y']
     gravity_obs   = payload['gravity_obs']
@@ -105,6 +132,9 @@ def run_one_chain(args):
     block_y_edges = payload['block_y_edges']
 
     initial_depths = np.full((NX, NY), float(init_depth))
+
+    print(f"START  init={init_depth:.0f} m  seed={seed}  iter={N_ITERATIONS:,}",
+          flush=True)
 
     t0 = time.time()
     result = run_mcmc_3d(
@@ -118,7 +148,7 @@ def run_one_chain(args):
         smoothness_weight=SMOOTHNESS_WEIGHT,
         n_sublayers=N_SUBLAYERS,
         initial_depths=initial_depths, seed=seed,
-        verbose=False,                   # quiet — many chains running together
+        verbose=True,        # auto-prefixed with [chain NN] by stdout wrapper
     )
     elapsed_min = (time.time() - t0) / 60.0
 
