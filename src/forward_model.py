@@ -14,11 +14,78 @@ Reference:
 
 import numpy as np
 
+try:
+    from numba import njit
+    _NUMBA_OK = True
+except Exception:
+    _NUMBA_OK = False
+    def njit(*args, **kwargs):
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        def _wrap(f):
+            return f
+        return _wrap
+
 # Gravitational constant in SI units (m^3 kg^-1 s^-2)
 G = 6.67430e-11
 
 # Conversion: 1 mGal = 1e-5 m/s^2
 SI_TO_MGAL = 1e5
+
+
+@njit(cache=True)
+def _gz_prism_kernel(x1, x2, y1, y2, z1, z2, density):
+    """JIT-compiled core of the Nagy prism formula.
+    Numerically identical to the pure-Python reference below."""
+    xs0 = x1; xs1 = x2
+    ys0 = y1; ys1 = y2
+    zs0 = z1; zs1 = z2
+    result = 0.0
+    for i in range(2):
+        x = xs0 if i == 0 else xs1
+        for j in range(2):
+            y = ys0 if j == 0 else ys1
+            for k in range(2):
+                z = zs0 if k == 0 else zs1
+                mu = 1.0 if ((i + j + k) % 2 == 0) else -1.0
+                r = np.sqrt(x * x + y * y + z * z)
+                if r < 1e-10:
+                    continue
+                term = 0.0
+                yr = y + r
+                if abs(yr) > 1e-10:
+                    term += x * np.log(yr)
+                xr = x + r
+                if abs(xr) > 1e-10:
+                    term += y * np.log(xr)
+                if abs(z * r) > 1e-10:
+                    term -= z * np.arctan2(x * y, z * r)
+                result += mu * term
+    return G * density * result
+
+
+@njit(cache=True)
+def _gz_prisms_loop_kernel(obs_x, obs_y, obs_z, prisms, densities):
+    """JIT-compiled double loop over stations and prisms.
+    Returns gravity in SI units (NOT yet scaled to mGal)."""
+    M = obs_x.shape[0]
+    N = prisms.shape[0]
+    gz_total = np.zeros(M)
+    for p in range(M):
+        ox = obs_x[p]
+        oy = obs_y[p]
+        oz = obs_z[p]
+        s = 0.0
+        for n in range(N):
+            x1 = prisms[n, 0] - ox
+            x2 = prisms[n, 1] - ox
+            y1 = prisms[n, 2] - oy
+            y2 = prisms[n, 3] - oy
+            z1 = prisms[n, 4] - oz
+            z2 = prisms[n, 5] - oz
+            s += _gz_prism_kernel(x1, x2, y1, y2, z1, z2, densities[n])
+        gz_total[p] = s
+    return gz_total
 
 
 def _gz_prism_single(x1, x2, y1, y2, z1, z2, density):
@@ -55,36 +122,7 @@ def _gz_prism_single(x1, x2, y1, y2, z1, z2, density):
         ]
     where r = sqrt(x^2 + y^2 + z^2) and mu_{ijk} = (-1)^(i+j+k)
     """
-    result = 0.0
-    for i, x in enumerate([x1, x2]):
-        for j, y in enumerate([y1, y2]):
-            for k, z in enumerate([z1, z2]):
-                mu = (-1) ** (i + j + k)
-                r = np.sqrt(x**2 + y**2 + z**2)
-
-                # Handle singularities
-                if r < 1e-10:
-                    continue
-
-                term = 0.0
-
-                # x * ln(y + r)
-                yr = y + r
-                if abs(yr) > 1e-10:
-                    term += x * np.log(yr)
-
-                # y * ln(x + r)
-                xr = x + r
-                if abs(xr) > 1e-10:
-                    term += y * np.log(xr)
-
-                # -z * arctan(xy / (zr))
-                if abs(z * r) > 1e-10:
-                    term -= z * np.arctan2(x * y, z * r)
-
-                result += mu * term
-
-    return G * density * result
+    return _gz_prism_kernel(x1, x2, y1, y2, z1, z2, density)
 
 
 def gz_prism(obs_x, obs_y, obs_z, prism_x1, prism_x2,
@@ -157,24 +195,10 @@ def gz_prisms_vectorized(obs_x, obs_y, obs_z, prisms, densities):
     prisms = np.asarray(prisms, dtype=float)
     densities = np.asarray(densities, dtype=float)
 
-    M = len(obs_x)
-    N = len(prisms)
-    gz_total = np.zeros(M)
+    if len(prisms) == 0:
+        return np.zeros(len(obs_x))
 
-    for p in range(M):
-        gz_sum = 0.0
-        for n in range(N):
-            x1 = prisms[n, 0] - obs_x[p]
-            x2 = prisms[n, 1] - obs_x[p]
-            y1 = prisms[n, 2] - obs_y[p]
-            y2 = prisms[n, 3] - obs_y[p]
-            z1 = prisms[n, 4] - obs_z[p]
-            z2 = prisms[n, 5] - obs_z[p]
-
-            gz_sum += _gz_prism_single(x1, x2, y1, y2, z1, z2,
-                                       densities[n])
-        gz_total[p] = gz_sum
-
+    gz_total = _gz_prisms_loop_kernel(obs_x, obs_y, obs_z, prisms, densities)
     return gz_total * SI_TO_MGAL
 
 
